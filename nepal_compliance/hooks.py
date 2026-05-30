@@ -6,18 +6,18 @@ app_email = "support@yarsalabs.com"
 app_license = "GNU General Public License (v3)"
 source_link = "https://github.com/yarsa/nepal-compliance"
 app_logo_url = "/assets/nepal_compliance/icon/app-icon.svg"
-app_home = "/desk/nepal-compliance"
+app_home = "/nepal-compliance"
 
 
 # Each item in the list will be shown as an app in the apps page
 add_to_apps_screen = [
-	{
-		"name": app_name,
-		"logo": "/assets/nepal_compliance/icon/app-icon.svg",
-		"title": app_title,
-		"route": app_home,
-		"has_permission": "nepal_compliance.utils.check_app_permission",
-	}
+    {
+        "name": app_name,
+        "logo": "/assets/nepal_compliance/icon/app-icon.svg",
+        "title": app_title,
+        "route": app_home,
+        "has_permission": "nepal_compliance.utils.check_app_permission",
+    }
 ]
 
 # Includes in <head>

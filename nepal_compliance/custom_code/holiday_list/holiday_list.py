@@ -11,7 +11,10 @@ class HolidayList_Nepali_Date(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from erpnext.setup.doctype.holiday.holiday import Holiday
+		try:
+			from erpnext.setup.doctype.holiday.holiday import Holiday
+		except ImportError:
+			Holiday = None  # type: ignore[assignment,misc]
 
 		color: DF.Color | None
 		country: DF.Autocomplete | None

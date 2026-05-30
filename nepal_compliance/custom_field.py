@@ -326,6 +326,4 @@ def create_custom_fields():
             else:
                 frappe.msgprint(_(f"Field '{field['label']}' already exists in {doctype_name}."))
 
-    return created_fields  
-
-create_custom_fields()
+    return created_fields

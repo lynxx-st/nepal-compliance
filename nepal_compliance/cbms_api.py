@@ -4,7 +4,7 @@ import json
 from frappe.utils.password import get_decrypted_password
 from frappe.utils.background_jobs import enqueue
 from frappe import _
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any
 
 class CBMSIntegration:
@@ -103,9 +103,7 @@ class CBMSIntegration:
                 frappe.log_error("Posting date is missing in the Sales Invoice.", "CBMS API Error")
                 return None
 
-            datetimeclient = frappe.utils.now()
-            datetime_obj = datetime.strptime(datetimeclient, "%Y-%m-%d %H:%M:%S.%f")
-            formatted_datetime = datetime_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+            formatted_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             self.invoice_payload = {
                 "username": self.cbms_settings.user_name,

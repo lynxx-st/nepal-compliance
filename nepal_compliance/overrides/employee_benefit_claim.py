@@ -2,7 +2,19 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate, formatdate
 from datetime import date
-from hrms.hr.utils import validate_active_employee
+
+# validate_active_employee location may vary between hrms versions
+try:
+    from hrms.hr.utils import validate_active_employee
+except ImportError:
+    try:
+        from hrms.utils import validate_active_employee
+    except ImportError:
+        def validate_active_employee(employee):
+            status = frappe.db.get_value("Employee", employee, "status")
+            if status == "Left":
+                frappe.throw(frappe._("Employee {0} is not active.").format(employee))
+
 from hrms.payroll.doctype.payroll_period.payroll_period import get_payroll_period
 from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import EmployeeBenefitClaim as HRMSEmployeeBenefitClaim
 

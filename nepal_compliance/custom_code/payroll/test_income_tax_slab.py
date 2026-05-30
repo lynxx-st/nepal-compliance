@@ -3,8 +3,8 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today, add_years, add_days
 from frappe import _
 import hashlib
-from erpnext.accounts.utils import get_fiscal_year
 from nepal_compliance.custom_code.payroll.income_tax_slab import (
+    _get_fiscal_year as get_fiscal_year,
     create_income_tax_slab_for_company,
     get_fiscal_year_for_company,
 )

@@ -1,9 +1,23 @@
 import frappe
 from frappe import _
 from frappe.utils import getdate
-from hrms.hr.doctype.leave_policy_assignment.leave_policy_assignment import LeavePolicyAssignment as BaseLeavePolicyAssignment
-from hrms.hr.doctype.leave_allocation.leave_allocation import create_leave_ledger_entry
 from typing import Optional, List, Union
+
+# LeavePolicyAssignment import — path consistent across hrms v15/v16
+try:
+    from hrms.hr.doctype.leave_policy_assignment.leave_policy_assignment import LeavePolicyAssignment as BaseLeavePolicyAssignment
+except ImportError:
+    from frappe.model.document import Document as BaseLeavePolicyAssignment  # type: ignore[assignment]
+
+# create_leave_ledger_entry import — path consistent across hrms v15/v16
+try:
+    from hrms.hr.doctype.leave_allocation.leave_allocation import create_leave_ledger_entry
+except ImportError:
+    def create_leave_ledger_entry(alloc_doc, args):
+        frappe.get_doc({
+            "doctype": "Leave Ledger Entry",
+            **args
+        }).insert(ignore_permissions=True)
 
 class LeavePolicyAssignment(BaseLeavePolicyAssignment):
 

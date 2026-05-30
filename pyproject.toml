@@ -4,14 +4,14 @@ authors = [
     { name = "Yarsa Labs Pvt. Ltd.", email = "support@yarsalabs.com"}
 ]
 description = "ERPNext app to comply with Nepali laws and regulations"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     "qrcode[pil]",
     "PyPDF2>=3.0.0",
     "Pillow>=10.0.0"
-    # "frappe~=15.0.0" # Installed and managed by bench.
+    # "frappe~=16.0.0" # Installed and managed by bench.
 ]
 
 [build-system]

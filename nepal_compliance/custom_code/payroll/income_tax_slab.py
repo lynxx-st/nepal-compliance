@@ -1,13 +1,33 @@
 import frappe
-from erpnext.accounts.utils import get_fiscal_year
+
+
+def _get_fiscal_year(date, company=None, as_dict=False):
+    """Compatibility wrapper for get_fiscal_year across ERPNext/Frappe versions."""
+    try:
+        from erpnext.accounts.utils import get_fiscal_year
+        return get_fiscal_year(date, company=company, as_dict=as_dict)
+    except ImportError:
+        pass
+    try:
+        from frappe.utils.fiscal_year import get_fiscal_year
+        return get_fiscal_year(date, company=company, as_dict=as_dict)
+    except ImportError:
+        pass
+    # Fallback: query directly
+    filters = {"year_start_date": ["<=", date], "year_end_date": [">=", date]}
+    if company:
+        filters["company"] = company
+    result = frappe.db.get_value("Fiscal Year", filters, ["name", "year_start_date", "year_end_date"], as_dict=True)
+    return result
+
 
 def create_income_tax_slabs_for_all_companies():
-    
+
     companies = frappe.get_all("Company", fields=["name", "default_currency"])
-    
+
     for company in companies:
         fiscal_year = get_fiscal_year_for_company(company["name"])
-        
+
         if fiscal_year:
             year_start_date = fiscal_year.year_start_date
             company_currency = company["default_currency"]
@@ -18,7 +38,7 @@ def create_income_tax_slabs_for_all_companies():
 
 def get_fiscal_year_for_company(company_name):
     try:
-        fy = get_fiscal_year(frappe.utils.today(), company=company_name, as_dict=True)
+        fy = _get_fiscal_year(frappe.utils.today(), company=company_name, as_dict=True)
         return frappe.get_doc("Fiscal Year", fy.name) if fy else None
     except frappe.exceptions.ValidationError:
         return None
