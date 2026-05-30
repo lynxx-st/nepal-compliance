@@ -2,7 +2,7 @@ name: Build and Push
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -164,7 +164,7 @@ jobs:
             cd ~/nepal-compliance
 
             # Pull latest code (compose.yaml, etc.)
-            git pull origin master
+            git pull origin main
 
             # Pull new Docker image
             docker compose pull
