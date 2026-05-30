@@ -6,7 +6,7 @@ app_email = "support@yarsalabs.com"
 app_license = "GNU General Public License (v3)"
 source_link = "https://github.com/yarsa/nepal-compliance"
 app_logo_url = "/assets/nepal_compliance/icon/app-icon.svg"
-app_home = "/nepal-compliance"
+app_home = "/app/nepal-compliance"
 
 
 # Each item in the list will be shown as an app in the apps page
