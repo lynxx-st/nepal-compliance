@@ -5,13 +5,14 @@ on:
       - master
     paths-ignore:
       - '**/*.md'
+  workflow_dispatch:
 
 env:
   TZ: /usr/share/zoneinfo/Asia/Kathmandu
   # 1m cache segment restore timeout to stop wasting resource time
   SEGMENT_DOWNLOAD_TIMEOUT_MINS: 1
   REGISTRY: docker.io
-  IMAGE_NAME: yarsalabs/nepal-compliance
+  IMAGE_NAME: lynxxstein/nepal-compliance
   APPS_JSON: ${{ vars.APPS_JSON }}
 
 # workflow can only read this repo’s code but cannot change
