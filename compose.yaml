@@ -223,11 +223,13 @@ services:
       - "587:587"     # Submission (send from mail clients)
       - "993:993"     # IMAPS
       - "143:143"     # IMAP
-      - "8181:8080"   # Admin UI + JMAP (proxied to admin.shrijalpaudel.com.np)
+      - "8181:8080"   # Admin UI + JMAP HTTP (proxied to admin.shrijalpaudel.com.np)
+      - "4443:443"    # JMAP HTTPS (after setup Stalwart moves to port 443)
     volumes:
       - stalwart-data:/opt/stalwart-mail
     environment:
       TZ: Asia/Kathmandu
+      STALWART_RECOVERY_ADMIN: "admin:StalwartAdmin2026!"
 
 volumes:
   db-data:

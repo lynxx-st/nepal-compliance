@@ -74,6 +74,32 @@ jobs:
           print('patched: nvm dir ownership fixed for frappe user (needed by frappe/mail bun install)')
           "
 
+      - name: Copy frappe/mail patches into Docker build context
+        run: |
+          mkdir -p frappe_docker/frappe_patches
+          cp frappe_patches/*.py frappe_docker/frappe_patches/
+
+      - name: Inject frappe/mail patch RUN steps into Containerfile
+        run: |
+          python3 -c "
+          f = 'frappe_docker/images/custom/Containerfile'
+          c = open(f).read()
+          # Insert COPY + RUN steps before the last USER frappe line
+          patch_block = '''
+          COPY frappe_patches/ /tmp/frappe_patches/
+          RUN python3 /tmp/frappe_patches/fix_jmap_connection.py
+          RUN python3 /tmp/frappe_patches/fix_jmap_user_settings.py
+          '''
+          # Find the last USER frappe occurrence
+          idx = c.rfind('\nUSER frappe')
+          if idx == -1:
+              print('ERROR: USER frappe not found in Containerfile')
+              exit(1)
+          c = c[:idx] + '\n' + patch_block.strip() + c[idx:]
+          open(f, 'w').write(c)
+          print('patched: Containerfile will apply frappe/mail jmap fixes during build')
+          "
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
