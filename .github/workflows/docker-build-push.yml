@@ -90,6 +90,7 @@ jobs:
           COPY frappe_patches/ /tmp/frappe_patches/
           RUN python3 /tmp/frappe_patches/fix_jmap_connection.py
           RUN python3 /tmp/frappe_patches/fix_jmap_user_settings.py
+          RUN python3 /tmp/frappe_patches/fix_jmap_account_api.py
           '''
           # Find the last USER frappe occurrence
           idx = c.rfind('\nUSER frappe')
