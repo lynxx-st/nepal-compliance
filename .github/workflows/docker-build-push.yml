@@ -148,3 +148,35 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    runs-on: ubuntu-24.04
+    needs: merge
+    steps:
+      - name: Deploy to Oracle Cloud VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 213.35.96.115
+          username: ubuntu
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/nepal-compliance
+
+            # Pull latest code (compose.yaml, etc.)
+            git pull origin master
+
+            # Pull new Docker image
+            docker compose pull
+
+            # Restart all services with new image (zero-downtime for stateless services)
+            docker compose up -d --remove-orphans
+
+            # Restart frontend to re-resolve backend IP after container recreation
+            sleep 5
+            docker compose restart frontend
+
+            # Clean up old images to save disk space
+            docker image prune -f
+
+            echo "Deploy complete: $(date)"
