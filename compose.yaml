@@ -213,7 +213,9 @@ services:
     image: ghcr.io/stalwartlabs/stalwart:latest
     container_name: stalwart
     networks:
-      - frappe_network
+      frappe_network:
+        aliases:
+          - mail.shrijalpaudel.com.np
     deploy:
       restart_policy:
         condition: on-failure
