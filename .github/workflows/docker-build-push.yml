@@ -64,6 +64,11 @@ jobs:
       - name: Clone frappe_docker
         run: git clone --depth=1 https://github.com/frappe/frappe_docker
 
+      - name: Patch Containerfile to install bun (required by frappe/mail)
+        run: |
+          # Install bun as root in the base image stage so frappe user can use it
+          sed -i 's|&& npm install -g yarn|&& npm install -g yarn \\\n    \&\& curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \\\n    \&\& chmod 755 /usr/local/bin/bun|' frappe_docker/images/custom/Containerfile
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
