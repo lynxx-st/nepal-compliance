@@ -13,17 +13,21 @@ if not p.exists():
     raise SystemExit(0)
 
 content = p.read_text()
-old = "self.__session = requests.Session()"
-new = "self.__session = requests.Session()\n        self.__session.verify = False  # allow self-signed cert from Stalwart internal Docker hostname"
 
 if "self.__session.verify = False" in content:
     print("SKIP: connection.py already patched")
     raise SystemExit(0)
 
-if old not in content:
+import re
+m = re.search(r'([ \t]*)self\.__session = requests\.Session\(\)', content)
+if not m:
     print(f"ERROR: target string not found in {p}")
     print("First 500 chars:", content[:500])
     raise SystemExit(1)
+
+indent = m.group(1)  # preserve exact indentation (tabs or spaces) from surrounding code
+old = "self.__session = requests.Session()"
+new = f"self.__session = requests.Session()\n{indent}self.__session.verify = False  # allow self-signed cert from Stalwart internal Docker hostname"
 
 p.write_text(content.replace(old, new, 1))
 print(f"PATCHED: {p} - jmap ssl verify=False for internal docker hostname")
