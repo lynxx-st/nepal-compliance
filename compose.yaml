@@ -209,12 +209,33 @@ services:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
 
+  stalwart:
+    image: ghcr.io/stalwartlabs/stalwart:latest
+    container_name: stalwart
+    networks:
+      - frappe_network
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "25:25"       # SMTP (receive mail from other servers)
+      - "465:465"     # SMTPS
+      - "587:587"     # Submission (send from mail clients)
+      - "993:993"     # IMAPS
+      - "143:143"     # IMAP
+      - "8181:8080"   # Admin UI + JMAP (proxied to admin.shrijalpaudel.com.np)
+    volumes:
+      - stalwart-data:/opt/stalwart-mail
+    environment:
+      TZ: Asia/Kathmandu
+
 volumes:
   db-data:
   redis-queue-data:
   redis-cache-data:
   sites:
   logs:
+  stalwart-data:
 
 networks:
   frappe_network:
