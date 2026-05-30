@@ -66,8 +66,16 @@ jobs:
 
       - name: Patch Containerfile to install bun (required by frappe/mail)
         run: |
-          # Install bun as root in the base image stage so frappe user can use it
-          sed -i 's|&& npm install -g yarn|&& npm install -g yarn \\\n    \&\& curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \\\n    \&\& chmod 755 /usr/local/bin/bun|' frappe_docker/images/custom/Containerfile
+          # Install bun system-wide as root so frappe/mail can use it
+          python3 - <<'PYEOF'
+          content = open('frappe_docker/images/custom/Containerfile').read()
+          old = '&& npm install -g yarn \\'
+          new = ('&& npm install -g yarn \\\n'
+                 '    && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \\\n'
+                 '    && chmod 755 /usr/local/bin/bun \\')
+          open('frappe_docker/images/custom/Containerfile', 'w').write(content.replace(old, new, 1))
+          print("Containerfile patched for bun")
+          PYEOF
 
       - name: Build and push by digest
         id: build
