@@ -79,7 +79,7 @@ services:
           fi
         done;
         echo "sites/common_site_config.json found";
-        bench new-site --mariadb-user-host-login-scope='%' --admin-password=${ADMIN_PASSWORD} --db-root-username=root --db-root-password=${DB_ROOT_PASSWORD} --install-app erpnext --install-app hrms --install-app crm --install-app print_designer --install-app insights --install-app mail --install-app nepal_compliance --set-default frontend;
+        bench new-site --mariadb-user-host-login-scope='%' --admin-password=${ADMIN_PASSWORD} --db-root-username=root --db-root-password=${DB_ROOT_PASSWORD} --install-app erpnext --install-app hrms --install-app crm --install-app print_designer --install-app insights --install-app mail --install-app posawesome --install-app nepal_compliance --set-default frontend;
 
   db:
     image: mariadb:10.6
