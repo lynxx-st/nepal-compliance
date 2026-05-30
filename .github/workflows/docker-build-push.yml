@@ -69,9 +69,9 @@ jobs:
           python3 -c "
           f='frappe_docker/images/custom/Containerfile'
           c=open(f).read()
-          c=c.replace('&& npm install -g yarn \\\\','&& npm install -g yarn \\\\\n    && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \\\\\n    && chmod 755 /usr/local/bin/bun \\\\',1)
+          c=c.replace('&& chown -R frappe:frappe /run/nginx.pid \\\\','&& chown -R frappe:frappe /run/nginx.pid \\\\\n    && chown -R frappe:frappe /home/frappe/.nvm \\\\',1)
           open(f,'w').write(c)
-          print('patched')
+          print('patched: nvm dir ownership fixed for frappe user (needed by frappe/mail bun install)')
           "
 
       - name: Build and push by digest
