@@ -63,7 +63,10 @@ jobs:
 
       - name: Encode APPS_JSON to base64
         run: |
-          echo "APPS_JSON_BASE64=$(echo '${{ env.APPS_JSON }}' | base64 -w 0)" >> $GITHUB_ENV
+          APPS_JSON_BASE64=$(printf '%s' "$APPS_JSON" | base64 -w 0)
+          echo "APPS_JSON_BASE64=$APPS_JSON_BASE64" >> $GITHUB_ENV
+        env:
+          APPS_JSON: ${{ vars.APPS_JSON }}
 
       - name: Clone frappe_docker
         run: git clone --depth=1 https://github.com/frappe/frappe_docker
