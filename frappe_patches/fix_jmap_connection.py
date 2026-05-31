@@ -1,33 +1,42 @@
 """
-Patch: frappe/mail JMAP connection - disable TLS verification for internal Docker hostname.
+Patch: frappe/mail - disable TLS verification for internal Docker hostname connections.
 
 Stalwart returns a JMAP session URL using its container hostname (e.g. https://d9218690d0e3/...)
-which has a self-signed cert. This patch disables SSL verify for the internal JMAP session
-so ERPNext mail can talk to Stalwart over Docker's internal network.
+which has a self-signed cert. This patch disables SSL verify in ALL session objects
+so ERPNext mail can talk to Stalwart over Docker's internal network without SSL errors.
+
+Patches two files:
+  - mail/jmap/connection.py  (JMAP client sessions)
+  - mail/backend.py          (HTTP backend sessions)
 """
-import pathlib
+import pathlib, re
 
-p = pathlib.Path("/home/frappe/frappe-bench/apps/mail/mail/jmap/connection.py")
-if not p.exists():
-    print("SKIP: connection.py not found (mail app not installed?)")
-    raise SystemExit(0)
 
-content = p.read_text()
+def patch_session(path_str: str) -> None:
+    p = pathlib.Path(path_str)
+    if not p.exists():
+        print(f"SKIP: {p.name} not found")
+        return
 
-if "self.__session.verify = False" in content:
-    print("SKIP: connection.py already patched")
-    raise SystemExit(0)
+    content = p.read_text()
+    if "self.__session.verify = False" in content:
+        print(f"SKIP: {p.name} already patched")
+        return
 
-import re
-m = re.search(r'([ \t]*)self\.__session = requests\.Session\(\)', content)
-if not m:
-    print(f"ERROR: target string not found in {p}")
-    print("First 500 chars:", content[:500])
-    raise SystemExit(1)
+    m = re.search(r'([ \t]*)self\.__session = requests\.Session\(\)', content)
+    if not m:
+        print(f"ERROR: Session() not found in {p.name}")
+        return
 
-indent = m.group(1)  # preserve exact indentation (tabs or spaces) from surrounding code
-old = "self.__session = requests.Session()"
-new = f"self.__session = requests.Session()\n{indent}self.__session.verify = False  # allow self-signed cert from Stalwart internal Docker hostname"
+    indent = m.group(1)
+    old = "self.__session = requests.Session()"
+    new = (
+        f"self.__session = requests.Session()\n"
+        f"{indent}self.__session.verify = False  # allow self-signed cert from Stalwart internal Docker hostname"
+    )
+    p.write_text(content.replace(old, new, 1))
+    print(f"PATCHED: {p} - added verify=False")
 
-p.write_text(content.replace(old, new, 1))
-print(f"PATCHED: {p} - jmap ssl verify=False for internal docker hostname")
+
+patch_session("/home/frappe/frappe-bench/apps/mail/mail/jmap/connection.py")
+patch_session("/home/frappe/frappe-bench/apps/mail/mail/backend.py")
