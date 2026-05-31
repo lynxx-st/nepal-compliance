@@ -205,7 +205,19 @@ jobs:
             sleep 5
             docker compose restart frontend
 
+            # Reload frontend nginx to pick up new backend IP
+            docker exec nepal-compliance-frontend-1 nginx -s reload || true
+
             # Clean up old images to save disk space
             docker image prune -f
 
             echo "Deploy complete: $(date)"
+
+      - name: Purge Cloudflare cache
+        if: ${{ vars.CLOUDFLARE_ZONE_ID != '' }}
+        run: |
+          curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${{ vars.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | jq '.success'
