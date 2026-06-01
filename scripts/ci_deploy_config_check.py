@@ -74,6 +74,8 @@ def validate_release_workflow() -> None:
         "docker compose exec -T backend bench --site \"$FRAPPE_SITE\" migrate",
         "trap rollback ERR",
         "docker pull \"$IMAGE_REF\"",
+        "IMAGE_REF: docker.io/",
+        "RELEASE_TAG:",
         "ORACLE_SMTP_USER",
         "ORACLE_SMTP_PASSWORD",
         "SSH production preflight",

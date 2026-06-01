@@ -35,7 +35,8 @@ jobs:
       PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/ubuntu/nepal-compliance' }}
       FRAPPE_SITE: ${{ vars.FRAPPE_SITE || 'frontend' }}
       REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
-      IMAGE_REF: ${{ needs.build_release_image.outputs.image_ref }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
       ORACLE_SMTP_HOST: ${{ vars.ORACLE_SMTP_HOST || 'smtp.email.ap-singapore-1.oci.oraclecloud.com' }}
       ORACLE_SMTP_PORT: ${{ vars.ORACLE_SMTP_PORT || '587' }}
       ORACLE_SMTP_USER: ${{ secrets.ORACLE_SMTP_USER }}
