@@ -1,8 +1,13 @@
 name: Label Large PR
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
 
 jobs:
   label-large-pr:
