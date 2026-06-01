@@ -50,18 +50,18 @@ def validate_compose() -> None:
 
 
 def validate_apps_file() -> None:
-    apps = json.loads((ROOT / ".github/apps-version-15.json").read_text(encoding="utf-8"))
+    apps = json.loads((ROOT / ".github/apps-version-16.json").read_text(encoding="utf-8"))
     by_url = {item["url"]: item["branch"] for item in apps}
     expected = {
-        "https://github.com/frappe/erpnext": "version-15",
-        "https://github.com/frappe/hrms": "version-15",
+        "https://github.com/frappe/erpnext": "version-16",
+        "https://github.com/frappe/hrms": "version-16",
         "https://github.com/frappe/mail": "develop",
         "https://github.com/The-Commit-Company/raven": "main",
         "https://github.com/lynxx-st/nepal-compliance": "development",
     }
     for url, branch in expected.items():
         if by_url.get(url) != branch:
-            fail(f".github/apps-version-15.json must pin {url} to {branch}")
+            fail(f".github/apps-version-16.json must pin {url} to {branch}")
 
 
 def validate_release_workflow() -> None:
@@ -76,6 +76,10 @@ def validate_release_workflow() -> None:
         "docker pull \"$IMAGE_REF\"",
         "ORACLE_SMTP_USER",
         "ORACLE_SMTP_PASSWORD",
+        "SSH production preflight",
+        "secrets.VM_SSH_KEY",
+        "docker compose ps",
+        "Raven User",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in text]
     if missing:

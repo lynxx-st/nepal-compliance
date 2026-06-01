@@ -67,20 +67,22 @@ def validate_frappe_metadata() -> None:
 
 
 def validate_apps_json() -> None:
-    apps_json = ROOT / ".github/apps-version-15.json"
+    apps_json = ROOT / ".github/apps-version-16.json"
     apps = json.loads(apps_json.read_text(encoding="utf-8"))
     found = {Path(app["url"]).stem.replace("-", "_") for app in apps}
     found.update({Path(app["url"]).stem for app in apps})
     missing = sorted(REQUIRED_APPS - found)
     if missing:
-        fail(f".github/apps-version-15.json missing apps: {', '.join(missing)}")
+        fail(f".github/apps-version-16.json missing apps: {', '.join(missing)}")
 
 
 def validate_workflow_routing() -> None:
     docker_workflow = (ROOT / ".github/workflows/docker-build.yml").read_text(encoding="utf-8")
     release_workflow = (ROOT / ".github/workflows/release-deploy.yml").read_text(encoding="utf-8")
-    if "version-15" not in docker_workflow:
-        fail("docker-build.yml must build Frappe version-15")
+    if "version-16" not in docker_workflow:
+        fail("docker-build.yml must build Frappe version-16")
+    if 'PYTHON_VERSION: "3.14.2"' not in docker_workflow:
+        fail("docker-build.yml must use Python 3.14 for frappe/mail")
     if "refs/heads/development" not in docker_workflow:
         fail("docker-build.yml must handle development branch tagging")
     if "refs/heads/main" not in docker_workflow:
@@ -89,6 +91,8 @@ def validate_workflow_routing() -> None:
         fail("docker-build.yml must support release tag builds")
     if "release:" not in release_workflow or "published" not in release_workflow:
         fail("release-deploy.yml must deploy only from published releases")
+    if "SSH production preflight" not in release_workflow:
+        fail("release-deploy.yml must include explicit SSH production preflight checks")
     if "push:" in release_workflow:
         fail("release-deploy.yml must not deploy on push")
 
