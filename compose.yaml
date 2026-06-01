@@ -4,7 +4,7 @@
 
 services:
   backend:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -20,7 +20,7 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
 
   configurator:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -49,7 +49,7 @@ services:
       - logs:/home/frappe/frappe-bench/logs
 
   create-site:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -104,7 +104,7 @@ services:
       - db-data:/var/lib/mysql
 
   frontend:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     depends_on:
@@ -130,7 +130,7 @@ services:
       - "8080:8080"
 
   queue-long:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -146,7 +146,7 @@ services:
       - logs:/home/frappe/frappe-bench/logs
 
   queue-short:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -182,7 +182,7 @@ services:
       - redis-cache-data:/data
 
   scheduler:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
@@ -196,7 +196,7 @@ services:
       - logs:/home/frappe/frappe-bench/logs
 
   websocket:
-    image: lynxxstein/nepal-compliance:latest
+    image: lynxxstein/nepal-compliance:${VERSION_TAG:-latest}
     networks:
       - frappe_network
     deploy:
