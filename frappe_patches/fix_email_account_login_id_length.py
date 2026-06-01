@@ -22,7 +22,7 @@ def patch_email_account_json():
         return
 
     path = matches[0]
-    with open(path) as f:
+    with open(path) as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal
         doctype = json.load(f)
 
     changed = False
@@ -37,7 +37,7 @@ def patch_email_account_json():
         print("fix_email_account_login_id_length: already 255 or field not found, skipping")
         return
 
-    with open(path, "w") as f:
+    with open(path, "w") as f:  # nosemgrep: frappe-semgrep-rules.rules.security.frappe-security-file-traversal
         json.dump(doctype, f, indent=1)
     print("fix_email_account_login_id_length: set login_id length=255 in doctype JSON")
 

@@ -127,6 +127,17 @@ jobs:
             os: ubuntu-24.04-arm
             platform: linux/arm64
     steps:
+      - name: Free disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk before cleanup:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /usr/local/lib/android /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+          sudo docker image prune -af 2>/dev/null || true
+          echo "Disk after cleanup:"; df -h / | tail -1
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
