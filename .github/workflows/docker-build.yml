@@ -193,6 +193,8 @@ jobs:
           RUN python3 /tmp/frappe_patches/fix_jmap_account_api.py
           RUN python3 /tmp/frappe_patches/fix_pwa_setup.py
           RUN python3 /tmp/frappe_patches/fix_boot_style_settings.py
+          RUN python3 /tmp/frappe_patches/fix_apply_price_list.py
+          RUN python3 /tmp/frappe_patches/fix_email_account_login_id_length.py
           """.strip()
           marker = "\nUSER frappe"
           idx = content.rfind(marker)
