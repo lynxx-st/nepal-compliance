@@ -192,6 +192,7 @@ jobs:
           RUN python3 /tmp/frappe_patches/fix_jmap_user_settings.py
           RUN python3 /tmp/frappe_patches/fix_jmap_account_api.py
           RUN python3 /tmp/frappe_patches/fix_pwa_setup.py
+          RUN python3 /tmp/frappe_patches/fix_boot_style_settings.py
           """.strip()
           marker = "\nUSER frappe"
           idx = content.rfind(marker)
