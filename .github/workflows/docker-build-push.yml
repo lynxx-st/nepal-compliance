@@ -60,7 +60,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/development' }}
 
       - name: Clone frappe_docker
         run: git clone --depth=1 https://github.com/frappe/frappe_docker
@@ -165,22 +166,23 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/development' }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker buildx imagetools inspect $(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
 
   deploy:
     runs-on: ubuntu-24.04
     needs: merge
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to Oracle Cloud VM
         uses: appleboy/ssh-action@v1
@@ -192,7 +194,7 @@ jobs:
             set -e
             cd ~/nepal-compliance
 
-            # Pull latest code (compose.yaml, etc.)
+            # Pull latest code (compose.yaml, etc.) from main (production branch)
             git pull origin main
 
             # Pull new Docker image
