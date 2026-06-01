@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - development
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Repository validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate Python, Frappe metadata, and JSON
+        run: python scripts/ci_validate.py
+
+  deploy_config:
+    name: Deployment config validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose and release guards
+        run: python scripts/ci_deploy_config_check.py
+
+      - name: Render Docker Compose config
+        env:
+          VERSION_TAG: ci
+          DB_HOST: db
+          DB_PORT: "3306"
+          MYSQL_ROOT_PASSWORD: ci
+          MARIADB_ROOT_PASSWORD: ci
+          DB_ROOT_PASSWORD: ci
+          REDIS_CACHE: redis-cache:6379
+          REDIS_QUEUE: redis-queue:6379
+          SOCKETIO_PORT: "9000"
+          ADMIN_PASSWORD: ci
+          BACKEND: backend:8000
+          FRAPPE_SITE_NAME_HEADER: frontend
+          SOCKETIO: websocket:9000
+          UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+          UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+          UPSTREAM_REAL_IP_RECURSIVE: "off"
+        run: docker compose config --quiet
+
+  workflow_lint:
+    name: Workflow lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Lint GitHub Actions workflows
+        uses: rhysd/actionlint@v1.7.7
+
+  secret_scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan tracked source for secret patterns
+        run: python scripts/ci_security_scan.py
+
+  lockfiles:
+    name: Lockfile consistency
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Verify Yarn lockfile
+        run: yarn install --frozen-lockfile --ignore-scripts
+
+      - name: Verify npm lockfile
+        run: npm ci --ignore-scripts
+
+  assets:
+    name: JavaScript assets
+    needs: lockfiles
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build assets
+        run: yarn build

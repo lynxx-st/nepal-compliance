@@ -16,7 +16,8 @@
   <a href="https://hub.docker.com/r/yarsalabs/nepal-compliance" rel="nofollow"><img src="https://img.shields.io/docker/pulls/yarsalabs/nepal-compliance.svg"></a>
   <a href="https://github.com/yarsa/nepal-compliance/actions/workflows/semgrep-rules.yml" rel="nofollow"><img src="https://github.com/yarsa/nepal-compliance/actions/workflows/semgrep-rules.yml/badge.svg"></a>
   <a href="https://github.com/yarsa/nepal-compliance/actions/workflows/codeql.yml" rel="nofollow"><img src="https://github.com/yarsa/nepal-compliance/actions/workflows/codeql.yml/badge.svg"></a>
-  <a href="https://github.com/yarsa/nepal-compliance/actions/workflows/docker-build-push.yml" rel="nofollow"><img src="https://github.com/yarsa/nepal-compliance/actions/workflows/docker-build-push.yml/badge.svg"></a>
+  <a href="https://github.com/yarsa/nepal-compliance/actions/workflows/ci.yml" rel="nofollow"><img src="https://github.com/yarsa/nepal-compliance/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/yarsa/nepal-compliance/actions/workflows/docker-build.yml" rel="nofollow"><img src="https://github.com/yarsa/nepal-compliance/actions/workflows/docker-build.yml/badge.svg"></a>
 </p>
 
 This project is an app developed on top of <a href="https://github.com/frappe/frappe"> Frappe Framework </a>, <a href="https://github.com/frappe/erpnext"> ERPNext</a> and <a href="https://github.com/frappe/hrms"> Frappe HR</a>, free and open source projects built by Frappe Technologies.

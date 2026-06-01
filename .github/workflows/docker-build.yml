@@ -1,0 +1,338 @@
+name: Docker Build
+
+on:
+  push:
+    branches:
+      - main
+      - development
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+      release_tag:
+        required: false
+        type: string
+    outputs:
+      image_ref:
+        description: Primary image reference pushed by this workflow
+        value: ${{ jobs.merge.outputs.image_ref }}
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}
+  FRAPPE_BRANCH: version-16
+  FRAPPE_PATH: https://github.com/frappe/frappe
+  PYTHON_VERSION: "3.14.2"
+  NODE_VERSION: "24.13.0"
+  REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: "1"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    name: Prepare build metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      build_ref: ${{ steps.meta.outputs.build_ref }}
+      apps_json: ${{ steps.meta.outputs.apps_json }}
+      primary_tag: ${{ steps.tags.outputs.primary_tag }}
+      metadata_tags: ${{ steps.tags.outputs.metadata_tags }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve build metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_ref="${{ inputs.ref || github.ref }}"
+          apps_json="$(jq -c . .github/apps-version-16.json)"
+
+          if [[ "${{ github.ref }}" == "refs/heads/development" || "${build_ref}" == "development" || "${build_ref}" == "refs/heads/development" ]]; then
+            apps_json="$(jq -c 'map(if .url == "https://github.com/lynxx-st/nepal-compliance" then .branch = "development" else . end)' .github/apps-version-16.json)"
+          elif [[ -n "${{ inputs.release_tag || '' }}" ]]; then
+            release_tag="${{ inputs.release_tag }}"
+            apps_json="$(jq -c --arg release_tag "$release_tag" 'map(if .url == "https://github.com/lynxx-st/nepal-compliance" then (.branch = $release_tag) else . end)' .github/apps-version-16.json)"
+          else
+            apps_json="$(jq -c 'map(if .url == "https://github.com/lynxx-st/nepal-compliance" then .branch = "main" else . end)' .github/apps-version-16.json)"
+          fi
+
+          jq -e . >/dev/null <<<"$apps_json"
+          echo "build_ref=${build_ref}" >> "$GITHUB_OUTPUT"
+          {
+            echo "apps_json<<EOF"
+            echo "$apps_json"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Docker tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::12}"
+          if [[ -n "${{ inputs.release_tag || '' }}" ]]; then
+            release_tag="${{ inputs.release_tag }}"
+            primary_tag="$release_tag"
+            metadata_tags=$'type=raw,value='"$release_tag"$'\ntype=raw,value=sha-'"$short_sha"$'\ntype=raw,value=latest'
+          elif [[ "${GITHUB_REF}" == "refs/heads/development" ]]; then
+            primary_tag="dev"
+            metadata_tags=$'type=raw,value=dev\ntype=raw,value=dev-'"$short_sha"
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            primary_tag="main-${short_sha}"
+            metadata_tags=$'type=raw,value=main-'"$short_sha"
+          else
+            primary_tag="manual-${short_sha}"
+            metadata_tags=$'type=raw,value=manual-'"$short_sha"
+          fi
+
+          echo "primary_tag=${primary_tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "metadata_tags<<EOF"
+            echo "$metadata_tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: amd64
+            os: ubuntu-24.04
+            platform: linux/amd64
+          - name: arm64
+            os: ubuntu-24.04-arm
+            platform: linux/arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.build_ref }}
+
+      - name: Validate apps JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/apps.json <<'JSON'
+          ${{ needs.prepare.outputs.apps_json }}
+          JSON
+          jq -e . /tmp/apps.json >/dev/null
+          jq -r '.[] | "\(.url)#\(.branch)"' /tmp/apps.json
+
+      - name: Login to Docker Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
+
+      - name: Clone frappe_docker
+        run: git clone --depth=1 https://github.com/frappe/frappe_docker
+
+      - name: Write apps JSON secret file
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/apps.json <<'JSON'
+          ${{ needs.prepare.outputs.apps_json }}
+          JSON
+          jq -e . /tmp/apps.json >/dev/null
+
+      - name: Patch Containerfile for mail and Frappe patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("frappe_docker/images/custom/Containerfile")
+          content = path.read_text()
+          content = content.replace(
+              "&& chown -R frappe:frappe /run/nginx.pid \\",
+              "&& chown -R frappe:frappe /run/nginx.pid \\\n    && chown -R frappe:frappe /home/frappe/.nvm \\",
+              1,
+          )
+          patch_block = """
+          COPY frappe_patches/ /tmp/frappe_patches/
+          RUN python3 /tmp/frappe_patches/fix_jmap_connection.py
+          RUN python3 /tmp/frappe_patches/fix_jmap_user_settings.py
+          RUN python3 /tmp/frappe_patches/fix_jmap_account_api.py
+          RUN python3 /tmp/frappe_patches/fix_pwa_setup.py
+          RUN python3 /tmp/frappe_patches/fix_boot_style_settings.py
+          RUN python3 /tmp/frappe_patches/fix_apply_price_list.py
+          RUN python3 /tmp/frappe_patches/fix_email_account_login_id_length.py
+          """.strip()
+          marker = "\nUSER frappe"
+          idx = content.rfind(marker)
+          if idx == -1:
+              raise SystemExit("USER frappe not found in Containerfile")
+          path.write_text(content[:idx] + "\n" + patch_block + content[idx:])
+          PY
+          mkdir -p frappe_docker/frappe_patches
+          cp frappe_patches/*.py frappe_docker/frappe_patches/
+
+      - name: Build image for pull request
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        env:
+          SOURCE_DATE_EPOCH: 0
+        with:
+          context: ./frappe_docker
+          file: frappe_docker/images/custom/Containerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          build-args: |
+            FRAPPE_PATH=${{ env.FRAPPE_PATH }}
+            FRAPPE_BRANCH=${{ env.FRAPPE_BRANCH }}
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            NODE_VERSION=${{ env.NODE_VERSION }}
+          secret-files: |
+            apps_json=/tmp/apps.json
+
+      - name: Build and push by digest
+        if: github.event_name != 'pull_request'
+        id: build
+        uses: docker/build-push-action@v6
+        env:
+          SOURCE_DATE_EPOCH: 0
+        with:
+          context: ./frappe_docker
+          file: frappe_docker/images/custom/Containerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            FRAPPE_PATH=${{ env.FRAPPE_PATH }}
+            FRAPPE_BRANCH=${{ env.FRAPPE_BRANCH }}
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            NODE_VERSION=${{ env.NODE_VERSION }}
+          secret-files: |
+            apps_json=/tmp/apps.json
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.name }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish manifest and smoke check
+    if: github.event_name != 'pull_request'
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-24.04
+    outputs:
+      image_ref: ${{ steps.image.outputs.image_ref }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          digest_args=()
+          for digest_file in *; do
+            digest_args+=("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:${digest_file}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${digest_args[@]}"
+
+      - name: Resolve primary image
+        id: image
+        run: echo "image_ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.primary_tag }}" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect image
+        run: docker buildx imagetools inspect "${{ steps.image.outputs.image_ref }}"
+
+      - name: Smoke check image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.image_ref }}"
+          docker run --rm --platform linux/amd64 -e REQUIRED_FRAPPE_APPS="$REQUIRED_FRAPPE_APPS" "$image" bash -lc '
+            set -euo pipefail
+            bench version
+            for app in ${REQUIRED_FRAPPE_APPS//,/ }; do
+              test -d "/home/frappe/frappe-bench/apps/$app" || {
+                echo "Missing app directory: $app"
+                exit 1
+              }
+            done
+          '

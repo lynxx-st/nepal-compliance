@@ -1,0 +1,255 @@
+name: Release Deploy
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build_release_image:
+    name: Build release image
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+      release_tag: ${{ github.event.release.tag_name || inputs.release_tag }}
+    secrets: inherit
+
+  deploy:
+    name: Deploy to Oracle Cloud
+    needs: build_release_image
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      PROD_VM_HOST: ${{ vars.PROD_VM_HOST || '213.35.96.115' }}
+      PROD_VM_USER: ${{ vars.PROD_VM_USER || 'ubuntu' }}
+      PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/ubuntu/nepal-compliance' }}
+      FRAPPE_SITE: ${{ vars.FRAPPE_SITE || 'frontend' }}
+      REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
+      ORACLE_SMTP_HOST: ${{ vars.ORACLE_SMTP_HOST || 'smtp.email.ap-singapore-1.oci.oraclecloud.com' }}
+      ORACLE_SMTP_PORT: ${{ vars.ORACLE_SMTP_PORT || '587' }}
+      ORACLE_SMTP_USER: ${{ secrets.ORACLE_SMTP_USER }}
+      ORACLE_SMTP_PASSWORD: ${{ secrets.ORACLE_SMTP_PASSWORD }}
+    steps:
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${PROD_VM_HOST}"
+          test -n "${PROD_VM_USER}"
+          test -n "${IMAGE_REF}"
+          test -n "${ORACLE_SMTP_HOST}"
+          test -n "${ORACLE_SMTP_PORT}"
+          test -n "${ORACLE_SMTP_USER}" || { echo "Missing ORACLE_SMTP_USER secret"; exit 1; }
+          test -n "${ORACLE_SMTP_PASSWORD}" || { echo "Missing ORACLE_SMTP_PASSWORD secret"; exit 1; }
+
+      - name: SSH production preflight
+        uses: appleboy/ssh-action@v1
+        env:
+          PROD_DEPLOY_PATH: ${{ env.PROD_DEPLOY_PATH }}
+          FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
+          REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
+          ORACLE_SMTP_HOST: ${{ env.ORACLE_SMTP_HOST }}
+          ORACLE_SMTP_PORT: ${{ env.ORACLE_SMTP_PORT }}
+          ORACLE_SMTP_USER: ${{ env.ORACLE_SMTP_USER }}
+          ORACLE_SMTP_PASSWORD: ${{ env.ORACLE_SMTP_PASSWORD }}
+        with:
+          host: ${{ env.PROD_VM_HOST }}
+          username: ${{ env.PROD_VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
+          script: |
+            set -euo pipefail
+            cd "$PROD_DEPLOY_PATH"
+
+            command -v docker >/dev/null
+            command -v python3 >/dev/null
+            docker compose version
+            test -d .git
+            test -f compose.yaml
+
+            available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
+            test "$available_kb" -gt 2097152 || {
+              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
+              exit 1
+            }
+
+            docker compose ps
+
+            python3 - <<'PY'
+            import os
+            import smtplib
+            import ssl
+
+            with smtplib.SMTP(os.environ["ORACLE_SMTP_HOST"], int(os.environ["ORACLE_SMTP_PORT"]), timeout=20) as smtp:
+                smtp.ehlo()
+                smtp.starttls(context=ssl.create_default_context())
+                smtp.ehlo()
+                smtp.login(os.environ["ORACLE_SMTP_USER"], os.environ["ORACLE_SMTP_PASSWORD"])
+            print("Oracle SMTP authentication passed.")
+            PY
+
+            apps="$(docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps)"
+            echo "$apps"
+            IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
+            for app in "${required[@]}"; do
+              echo "$apps" | grep -qx "$app" || {
+                echo "Missing installed Frappe app: $app"
+                exit 1
+              }
+            done
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["DocType", "Raven User"]' | grep -qi "true"
+
+      - name: Deploy by SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          PROD_DEPLOY_PATH: ${{ env.PROD_DEPLOY_PATH }}
+          FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
+          REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          ORACLE_SMTP_HOST: ${{ env.ORACLE_SMTP_HOST }}
+          ORACLE_SMTP_PORT: ${{ env.ORACLE_SMTP_PORT }}
+          ORACLE_SMTP_USER: ${{ env.ORACLE_SMTP_USER }}
+          ORACLE_SMTP_PASSWORD: ${{ env.ORACLE_SMTP_PASSWORD }}
+        with:
+          host: ${{ env.PROD_VM_HOST }}
+          username: ${{ env.PROD_VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
+          script: |
+            set -euo pipefail
+
+            cd "$PROD_DEPLOY_PATH"
+
+            require_cmd() {
+              command -v "$1" >/dev/null 2>&1 || {
+                echo "Missing required command: $1"
+                exit 1
+              }
+            }
+
+            smtp_check() {
+              python3 - <<'PY'
+            import os
+            import smtplib
+            import ssl
+
+            host = os.environ["ORACLE_SMTP_HOST"]
+            port = int(os.environ["ORACLE_SMTP_PORT"])
+            user = os.environ["ORACLE_SMTP_USER"]
+            password = os.environ["ORACLE_SMTP_PASSWORD"]
+
+            with smtplib.SMTP(host, port, timeout=20) as smtp:
+                smtp.ehlo()
+                smtp.starttls(context=ssl.create_default_context())
+                smtp.ehlo()
+                smtp.login(user, password)
+            print("Oracle SMTP authentication passed.")
+            PY
+            }
+
+            check_apps() {
+              local site="$1"
+              local apps
+              apps="$(docker compose exec -T backend bench --site "$site" list-apps)"
+              echo "$apps"
+              IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
+              for app in "${required[@]}"; do
+                echo "$apps" | grep -qx "$app" || {
+                  echo "Missing installed Frappe app: $app"
+                  exit 1
+                }
+              done
+              docker compose exec -T backend bench --site "$site" execute frappe.db.exists --args '["DocType", "Raven User"]' | grep -qi "true"
+            }
+
+            set_version_tag() {
+              local tag="$1"
+              if grep -q '^VERSION_TAG=' .env; then
+                sed -i "s/^VERSION_TAG=.*/VERSION_TAG=${tag}/" .env
+              else
+                printf '\nVERSION_TAG=%s\n' "$tag" >> .env
+              fi
+            }
+
+            rollback() {
+              local exit_code="$?"
+              trap - ERR
+              if [[ "$DEPLOY_STARTED" == "1" && -n "$PREVIOUS_TAG" ]]; then
+                echo "Deployment failed; rolling back to ${PREVIOUS_TAG}"
+                DEPLOY_STARTED=0
+                set_version_tag "$PREVIOUS_TAG"
+                docker compose pull
+                docker compose up -d --remove-orphans --scale create-site=0
+                docker compose restart frontend websocket queue-short queue-long scheduler || true
+              fi
+              exit "$exit_code"
+            }
+
+            DEPLOY_STARTED=0
+            PREVIOUS_TAG="$(grep -E '^VERSION_TAG=' .env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+            trap rollback ERR
+
+            require_cmd docker
+            docker compose version
+            test -d .git
+            test -f compose.yaml
+            available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
+            test "$available_kb" -gt 2097152 || {
+              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
+              exit 1
+            }
+
+            docker compose ps
+            smtp_check
+            check_apps "$FRAPPE_SITE"
+
+            echo "$PREVIOUS_TAG" > .last-deployed-tag
+
+            git fetch --tags origin
+            git checkout main
+            git pull --ff-only origin main
+
+            export VERSION_TAG="${IMAGE_REF##*:}"
+            set_version_tag "$VERSION_TAG"
+            docker pull "$IMAGE_REF"
+            DEPLOY_STARTED=1
+            docker compose pull
+            docker compose up -d --remove-orphans --scale create-site=0
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" migrate
+            docker compose restart frontend websocket queue-short queue-long scheduler
+            sleep 15
+
+            docker compose ps
+            check_apps "$FRAPPE_SITE"
+            smtp_check
+            curl -fsS --max-time 20 "http://127.0.0.1:8080/api/method/ping" | grep -q pong
+            curl -fsS --max-time 20 "http://127.0.0.1:8080/raven" >/dev/null
+
+            DEPLOY_STARTED=0
+            docker image prune -f
+            echo "Deploy complete: $(date -Iseconds)"
+
+      - name: Purge Cloudflare cache
+        if: ${{ vars.CLOUDFLARE_ZONE_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${{ vars.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | jq -e '.success == true'
