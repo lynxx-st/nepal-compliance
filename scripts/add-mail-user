@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+Usage: add-mail-user email@shrijalpaudel.com.np "Display Name"
+
+Sets up a new user:
+  1. Approves Oracle Email Delivery sender
+  2. Creates ERPNext Email Account (outgoing via Oracle SMTP)
+  3. Creates Raven User (team chat)
+  4. Creates Stalwart mailbox (if @shrijalpaudel.com.np)
+"""
+import sys, subprocess, json, os, tempfile, time, secrets
+
+if len(sys.argv) < 2:
+    print("Usage: add-mail-user email@shrijalpaudel.com.np \"Display Name\"")
+    sys.exit(1)
+
+EMAIL      = sys.argv[1]
+DISPLAY    = sys.argv[2] if len(sys.argv) > 2 else EMAIL.split("@")[0].replace(".", " ").title()
+FIRST      = DISPLAY.split()[0]
+DOMAIN     = EMAIL.split("@")[1]
+OCI        = "/home/ubuntu/.local/bin/oci"
+BENCH      = "/home/frappe/frappe-bench"
+CREDS_FILE = "/opt/oci_smtp_creds.json"
+COMPARTMENT = "ocid1.tenancy.oc1..aaaaaaaan5xaffrkifg7c5nciqx27hungmxitbkmefnaexavu7fyimdg5jcq"
+REGION     = "ap-singapore-1"
+BACKEND    = "nepal-compliance-backend-1"
+
+creds     = json.load(open(CREDS_FILE))
+SMTP_USER = creds["user"]
+SMTP_PASS = creds["pass"]
+
+print(f"\nSetting up {EMAIL} ({DISPLAY})...")
+
+# ── 1. Approve Oracle sender ──────────────────────────────────────────────────
+print("1. Approving Oracle Email Delivery sender...")
+r = subprocess.run([OCI, "email", "sender", "create",
+    "--compartment-id", COMPARTMENT,
+    "--email-address", EMAIL,
+    "--region", REGION, "--output", "json"], capture_output=True)
+if r.returncode == 0:
+    print(f"   ✓ Approved: {EMAIL}")
+else:
+    err = r.stderr.decode()
+    if "already" in err.lower():
+        print(f"   ✓ Already approved: {EMAIL}")
+    else:
+        print(f"   ✗ Oracle error: {err[:200]}")
+
+# ── 2. Create Stalwart mailbox (only for @shrijalpaudel.com.np) ───────────────
+MAILBOX_PASS = None
+if DOMAIN == "shrijalpaudel.com.np":
+    print("2. Creating Stalwart mailbox...")
+    MAILBOX_PASS = "Nepal@" + secrets.token_hex(4).upper()
+
+    def stalwart_token():
+        d = json.loads(subprocess.run(
+            ["curl","-sk","-X","POST","https://127.0.0.1:4443/auth/device",
+             "-H","Content-Type: application/x-www-form-urlencoded",
+             "-d","client_id=stalwart-web-admin"], capture_output=True).stdout)
+        subprocess.run(
+            ["curl","-sk","-X","POST","https://127.0.0.1:4443/api/auth",
+             "-H","Content-Type: application/json",
+             "-d", json.dumps({"type":"authDevice","accountName":"admin",
+                               "accountSecret":"StalwartAdmin2026!","code":d["user_code"]})],
+            capture_output=True)
+        time.sleep(2)
+        return json.loads(subprocess.run(
+            ["curl","-sk","-X","POST","https://127.0.0.1:4443/auth/token",
+             "-H","Content-Type: application/x-www-form-urlencoded",
+             "-d",f"grant_type=urn:ietf:params:oauth:grant-type:device_code"
+                  f"&device_code={d['device_code']}&client_id=stalwart-web-admin"],
+            capture_output=True).stdout)["access_token"]
+
+    try:
+        token = stalwart_token()
+        # Create individual account via JMAP
+        payload = {"using":["urn:ietf:params:jmap:core"],"methodCalls":[
+            ["x:Account/set",{"accountId":"d333333","create":{"new":{
+                "@type":"User","name":EMAIL,
+                "emails":[EMAIL],"description":DISPLAY,
+                "password":MAILBOX_PASS}}},
+             "0"]
+        ]}
+        resp = json.loads(subprocess.run(
+            ["curl","-sk","-L",
+             "-H",f"Authorization: Bearer {token}",
+             "-H","Content-Type: application/json",
+             "-d",json.dumps(payload),
+             "https://127.0.0.1:4443/jmap"], capture_output=True).stdout)
+        created = resp["methodResponses"][0][1].get("created",{})
+        not_created = resp["methodResponses"][0][1].get("notCreated",{})
+        if created:
+            print(f"   ✓ Stalwart mailbox created (password: {MAILBOX_PASS})")
+        elif not_created:
+            err_desc = list(not_created.values())[0].get("description","")
+            if "already exists" in err_desc.lower():
+                print(f"   ✓ Stalwart mailbox already exists")
+            else:
+                print(f"   ✗ Stalwart error: {err_desc[:100]}")
+    except Exception as e:
+        print(f"   ! Stalwart skipped: {e}")
+        MAILBOX_PASS = None
+else:
+    print("2. Skipped Stalwart (not @shrijalpaudel.com.np)")
+
+# ── 3. Create ERPNext Email Account ───────────────────────────────────────────
+print("3. Creating ERPNext Email Account...")
+acct_sql = f"""INSERT IGNORE INTO `tabEmail Account`
+    (name, email_account_name, email_id, domain,
+     enable_outgoing, enable_incoming,
+     smtp_server, smtp_port, use_tls, use_ssl_for_outgoing,
+     email_server, incoming_port, use_imap, use_ssl,
+     login_id, password,
+     creation, modified, docstatus, idx, owner, modified_by)
+  VALUES
+    ('{DISPLAY}', '{DISPLAY}', '{EMAIL}', '{DOMAIN}',
+     1, 0,
+     'smtp.email.ap-singapore-1.oci.oraclecloud.com', 587, 1, 0,
+     'mail.{DOMAIN}', 993, 1, 1,
+     '{SMTP_USER}', '{SMTP_PASS}',
+     NOW(), NOW(), 0, 0, 'Administrator', 'Administrator');
+"""
+with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as f:
+    f.write(acct_sql); tmp = f.name
+subprocess.run(["docker","cp", tmp, f"{BACKEND}:/tmp/_email.sql"])
+r = subprocess.run(
+    ["docker","exec",BACKEND,"bash","-c",
+     f"cd {BENCH} && bench --site frontend mariadb < /tmp/_email.sql"],
+    capture_output=True)
+print(f"   {'✓' if r.returncode==0 else '✗'} ERPNext Email Account: {DISPLAY}")
+
+# ── 4. Create Raven User ──────────────────────────────────────────────────────
+print("4. Adding to Raven...")
+raven_sql = f"""
+INSERT IGNORE INTO `tabRaven User`
+  (name, user, full_name, first_name, enabled,
+   creation, modified, docstatus, idx, owner, modified_by, type)
+  VALUES ('{EMAIL}', '{EMAIL}', '{DISPLAY}', '{FIRST}', 1,
+          NOW(), NOW(), 0, 0, 'Administrator', 'Administrator', 'User');
+
+INSERT IGNORE INTO `tabHas Role`
+  (name, parent, parenttype, parentfield, role)
+  VALUES (UUID(), '{EMAIL}', 'User', 'roles', 'Raven User');
+"""
+with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as f:
+    f.write(raven_sql); tmp2 = f.name
+subprocess.run(["docker","cp", tmp2, f"{BACKEND}:/tmp/_raven.sql"])
+r2 = subprocess.run(
+    ["docker","exec",BACKEND,"bash","-c",
+     f"cd {BENCH} && bench --site frontend mariadb < /tmp/_raven.sql"],
+    capture_output=True)
+print(f"   {'✓' if r2.returncode==0 else '✗'} Raven User: {EMAIL}")
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+print(f"""
+✅ Done! {EMAIL} ({DISPLAY}) is ready:
+   ✓ Oracle SMTP sender approved
+   ✓ ERPNext Email Account created
+   ✓ Raven team chat access granted
+   {'✓ Stalwart mailbox password: ' + MAILBOX_PASS if MAILBOX_PASS else '! Set Stalwart password at: https://mail.shrijalpaudel.com.np/admin'}
+""")

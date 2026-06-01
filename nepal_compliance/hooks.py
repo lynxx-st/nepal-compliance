@@ -172,6 +172,10 @@ doc_events = {
     "*": {
         "validate": "nepal_compliance.backdated_doctype_restriction.validate_backdate_and_sequence"
     },
+    "User": {
+        "after_insert": "nepal_compliance.integrations.raven.auto_add_raven_user",
+        "on_update": "nepal_compliance.integrations.raven.sync_raven_user",
+    },
     "Purchase Invoice" : {
         "on_trash": "nepal_compliance.utils.prevent_invoice_deletion",
         "before_insert": "nepal_compliance.utils.set_vat_numbers",
