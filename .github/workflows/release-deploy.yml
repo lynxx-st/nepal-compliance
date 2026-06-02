@@ -68,7 +68,6 @@ jobs:
           host: ${{ env.PROD_VM_HOST }}
           username: ${{ env.PROD_VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          script_stop: true
           envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
           script: |
             set -euo pipefail
@@ -101,7 +100,7 @@ jobs:
             print("Oracle SMTP authentication passed.")
             PY
 
-            apps="$(docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps)"
+            apps="$(docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps | awk '{print $1}')"
             echo "$apps"
             IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
             for app in "${required[@]}"; do
@@ -127,7 +126,6 @@ jobs:
           host: ${{ env.PROD_VM_HOST }}
           username: ${{ env.PROD_VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          script_stop: true
           envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
           script: |
             set -euo pipefail
@@ -164,7 +162,7 @@ jobs:
             check_apps() {
               local site="$1"
               local apps
-              apps="$(docker compose exec -T backend bench --site "$site" list-apps)"
+              apps="$(docker compose exec -T backend bench --site "$site" list-apps | awk '{print $1}')"
               echo "$apps"
               IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
               for app in "${required[@]}"; do
@@ -220,8 +218,9 @@ jobs:
             echo "$PREVIOUS_TAG" > .last-deployed-tag
 
             git fetch --tags origin
+            git fetch origin main
             git checkout main
-            git pull --ff-only origin main
+            git reset --hard origin/main
 
             export VERSION_TAG="${IMAGE_REF##*:}"
             set_version_tag "$VERSION_TAG"
