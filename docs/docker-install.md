@@ -31,6 +31,11 @@ ADMIN_PASSWORD=your-admin-password
 DB_ROOT_PASSWORD=your-db-root-password
 FRAPPE_SITE=frontend
 REQUIRED_FRAPPE_APPS=erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance
+STALWART_HOSTNAME=mail.example.com
+STALWART_MAIL_DOMAIN=example.com
+STALWART_ADMIN_URL=https://127.0.0.1:4443
+STALWART_ACCOUNT_ID=d333333
+STALWART_RECOVERY_ADMIN=admin:replace-with-a-strong-password
 ```
 ***Note: The `.env` file should be placed at the root of the project directory next to your `compose.yaml` file.***
 
@@ -85,6 +90,11 @@ These variables are defined in an `.env` file and used to inject configuration i
 | `ADMIN_PASSWORD`            | `your-admin-password`     | Administrator password for `bench new-site {site} --admin-password`|
 | `FRAPPE_SITE`               | `frontend`                | Site to create, migrate, and reconcile during setup.       |
 | `REQUIRED_FRAPPE_APPS`      | `erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance` | Idempotent app set installed on new and existing sites. |
+| `STALWART_HOSTNAME`         | `mail.example.com`         | Public hostname and internal network alias for Stalwart. |
+| `STALWART_MAIL_DOMAIN`      | `example.com`              | Domain accepted by the Stalwart mailbox helper.          |
+| `STALWART_ADMIN_URL`        | `https://127.0.0.1:4443`   | Local Stalwart administration and JMAP endpoint.          |
+| `STALWART_ACCOUNT_ID`       | `d333333`                  | Stalwart tenant/account identifier used for provisioning. |
+| `STALWART_RECOVERY_ADMIN`   | `admin:...`                | Initial Stalwart recovery account; use a strong secret.   |
 | `BACKEND`                   | `backend:8000`            | Backend app server address used by frontend.              |
 | `FRAPPE_SITE_NAME_HEADER`   | `frontend`                | Site name. Host header to route requests in multi-site setup.|
 | `UPSTREAM_REAL_IP_ADDRESS`  | `127.0.0.1`               | Upstream proxy IP for real IP resolution.                   |
@@ -100,6 +110,16 @@ bash scripts/install-required-apps.sh
 ```
 
 The command skips apps that are already installed, installs missing bundled apps, migrates the site, clears its cache, and fails if the image does not contain a required app.
+
+### Stalwart mail service
+
+Stalwart is included in the Compose stack and persists its configuration in the `stalwart-data` volume. Before the first start, set a strong `STALWART_RECOVERY_ADMIN` value and replace the example hostname/domain. The stack exposes SMTP, submission, IMAP, JMAP, and its administration endpoint; restrict these ports with your server firewall to the networks that require them.
+
+To provision a mailbox and corresponding ERPNext/Raven records after Stalwart is configured:
+
+```bash
+python3 scripts/add-mail-user person@example.com "Person Name"
+```
 
 # Next
 * Learn how to [contribute to this project](/CONTRIBUTING.md)

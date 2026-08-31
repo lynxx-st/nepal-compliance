@@ -158,7 +158,10 @@ before_uninstall = "nepal_compliance.uninstall.cleanup_salary_structures"
 # DocType Class
 # ---------------
 # Override standard doctype classes
-override_doctype_class = {
+# These controllers predate Frappe's mixin extension hook and contain complete
+# controller implementations. Keep them intact until each override can be
+# migrated and regression-tested independently.
+override_doctype_class = {  # nosemgrep: frappe-semgrep-rules.rules.override-doctype-class
     "Sales Invoice": "nepal_compliance.overrides.custom_sales_invoice.CustomSalesInvoice",
     "Salary Structure": "nepal_compliance.overrides.salary_structure.CustomSalaryStructure",
     "Employee Benefit Claim": "nepal_compliance.overrides.employee_benefit_claim.CustomEmployeeBenefitClaim",

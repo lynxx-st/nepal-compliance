@@ -69,6 +69,7 @@ class CustomPayrollEntry(PayrollEntry):
                 payroll_entry=self,
                 salary_slips=salary_slips,
                 publish_progress=False,
+                enqueue_after_commit=True,
             )
             frappe.msgprint(
                 _("Salary Slip submission is queued. It may take a few minutes"),

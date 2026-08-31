@@ -62,6 +62,13 @@ def validate_compose() -> None:
     if missing_apps:
         fail(f"create-site required app list is missing: {', '.join(sorted(missing_apps))}")
 
+    if not re.search(r"^  stalwart:\n", text, flags=re.MULTILINE):
+        fail("compose.yaml must include the Stalwart mail service")
+    if "ghcr.io/stalwartlabs/stalwart:" not in text:
+        fail("Stalwart must use the official container image")
+    if "STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}" not in text:
+        fail("Stalwart recovery credentials must come from the deployment environment")
+
 
 def validate_apps_file() -> None:
     apps = json.loads((ROOT / ".github/apps-version-16.json").read_text(encoding="utf-8"))
@@ -87,16 +94,15 @@ def validate_release_workflow() -> None:
         "types:",
         "- published",
         "environment: production",
-        "smtp.email.ap-singapore-1.oci.oraclecloud.com",
         "scripts/install-required-apps.sh",
+        "backup --with-files --compress",
         "trap rollback ERR",
         "docker pull \"$IMAGE_REF\"",
         "IMAGE_REF: docker.io/",
         "RELEASE_TAG:",
-        "ORACLE_SMTP_USER",
-        "ORACLE_SMTP_PASSWORD",
         "SSH production preflight",
-        "secrets.VM_SSH_KEY",
+        "secrets.SERVER_SSH_PASSWORD",
+        "Deploy to self-hosted server",
         "docker compose ps",
         "User\", \"Administrator",
     ]
@@ -104,7 +110,7 @@ def validate_release_workflow() -> None:
     if missing:
         fail(f"release-deploy.yml missing required deployment guards: {missing}")
 
-    if re.search(r"Deploy to Oracle.*push:", text, re.DOTALL):
+    if re.search(r"Deploy to self-hosted server.*push:", text, re.DOTALL):
         fail("release-deploy.yml must not deploy on push events")
 
 

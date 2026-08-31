@@ -219,11 +219,11 @@ services:
 
   stalwart:
     image: ghcr.io/stalwartlabs/stalwart:latest
-    container_name: stalwart
+    restart: unless-stopped
     networks:
       frappe_network:
         aliases:
-          - mail.shrijalpaudel.com.np
+          - ${STALWART_HOSTNAME:-mail.local}
     deploy:
       restart_policy:
         condition: on-failure
@@ -239,7 +239,7 @@ services:
       - stalwart-data:/opt/stalwart-mail
     environment:
       TZ: Asia/Kathmandu
-      STALWART_RECOVERY_ADMIN: "admin:StalwartAdmin2026!"
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}
 
 volumes:
   db-data:
