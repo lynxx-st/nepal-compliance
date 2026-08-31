@@ -12,6 +12,7 @@ services:
         condition: on-failure
     volumes:
       - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/assets
       - logs:/home/frappe/frappe-bench/logs
     environment:
       DB_HOST: ${DB_HOST}
@@ -46,6 +47,7 @@ services:
       SOCKETIO_PORT: ${SOCKETIO_PORT}
     volumes:
       - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/assets
       - logs:/home/frappe/frappe-bench/logs
 
   create-site:
@@ -57,6 +59,7 @@ services:
         condition: none
     volumes:
       - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/assets
       - logs:/home/frappe/frappe-bench/logs
     entrypoint:
       - bash
@@ -133,6 +136,7 @@ services:
       CLIENT_MAX_BODY_SIZE: 50m
     volumes:
       - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/assets
       - logs:/home/frappe/frappe-bench/logs
     ports:
       - "8080:8080"
@@ -246,6 +250,7 @@ volumes:
   redis-queue-data:
   redis-cache-data:
   sites:
+  assets:
   logs:
   stalwart-data:
 
