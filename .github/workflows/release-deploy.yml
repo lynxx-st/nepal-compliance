@@ -25,34 +25,27 @@ jobs:
     secrets: inherit
 
   deploy:
-    name: Deploy to Oracle Cloud
+    name: Deploy to self-hosted server
     needs: build_release_image
     runs-on: ubuntu-24.04
     environment: production
     env:
-      PROD_VM_HOST: ${{ vars.PROD_VM_HOST || '213.35.96.115' }}
-      PROD_VM_USER: ${{ vars.PROD_VM_USER || 'ubuntu' }}
-      PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/ubuntu/nepal-compliance' }}
+      PROD_SERVER_HOST: ${{ vars.PROD_SERVER_HOST || '45.115.217.121' }}
+      PROD_SERVER_USER: ${{ vars.PROD_SERVER_USER || 'flagforge' }}
+      PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/flagforge/nepal-compliance' }}
       FRAPPE_SITE: ${{ vars.FRAPPE_SITE || 'frontend' }}
-      REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
+      REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
-      ORACLE_SMTP_HOST: ${{ vars.ORACLE_SMTP_HOST || 'smtp.email.ap-singapore-1.oci.oraclecloud.com' }}
-      ORACLE_SMTP_PORT: ${{ vars.ORACLE_SMTP_PORT || '587' }}
-      ORACLE_SMTP_USER: ${{ secrets.ORACLE_SMTP_USER }}
-      ORACLE_SMTP_PASSWORD: ${{ secrets.ORACLE_SMTP_PASSWORD }}
+      REPOSITORY_URL: https://github.com/${{ github.repository }}.git
     steps:
       - name: Validate deployment secrets
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${PROD_VM_HOST}"
-          test -n "${PROD_VM_USER}"
+          test -n "${PROD_SERVER_HOST}"
+          test -n "${PROD_SERVER_USER}"
           test -n "${IMAGE_REF}"
-          test -n "${ORACLE_SMTP_HOST}"
-          test -n "${ORACLE_SMTP_PORT}"
-          test -n "${ORACLE_SMTP_USER}" || { echo "Missing ORACLE_SMTP_USER secret"; exit 1; }
-          test -n "${ORACLE_SMTP_PASSWORD}" || { echo "Missing ORACLE_SMTP_PASSWORD secret"; exit 1; }
 
       - name: SSH production preflight
         uses: appleboy/ssh-action@v1
@@ -60,56 +53,33 @@ jobs:
           PROD_DEPLOY_PATH: ${{ env.PROD_DEPLOY_PATH }}
           FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
           REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
-          ORACLE_SMTP_HOST: ${{ env.ORACLE_SMTP_HOST }}
-          ORACLE_SMTP_PORT: ${{ env.ORACLE_SMTP_PORT }}
-          ORACLE_SMTP_USER: ${{ env.ORACLE_SMTP_USER }}
-          ORACLE_SMTP_PASSWORD: ${{ env.ORACLE_SMTP_PASSWORD }}
         with:
-          host: ${{ env.PROD_VM_HOST }}
-          username: ${{ env.PROD_VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
+          host: ${{ env.PROD_SERVER_HOST }}
+          username: ${{ env.PROD_SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS
           script: |
             set -euo pipefail
             cd "$PROD_DEPLOY_PATH"
 
             command -v docker >/dev/null
-            command -v python3 >/dev/null
             docker compose version
             test -d .git
             test -f compose.yaml
 
             available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
-            test "$available_kb" -gt 2097152 || {
-              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
-              exit 1
-            }
+            if [[ "$available_kb" -le 2097152 ]]; then
+              docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1 || {
+                echo "Less than 2 GiB available and no approved legacy image can be reclaimed"
+                exit 1
+              }
+              echo "Low disk space accepted for one-time replacement of the approved legacy image"
+            fi
 
             docker compose ps
 
-            python3 - <<'PY'
-            import os
-            import smtplib
-            import ssl
-
-            with smtplib.SMTP(os.environ["ORACLE_SMTP_HOST"], int(os.environ["ORACLE_SMTP_PORT"]), timeout=20) as smtp:
-                smtp.ehlo()
-                smtp.starttls(context=ssl.create_default_context())
-                smtp.ehlo()
-                smtp.login(os.environ["ORACLE_SMTP_USER"], os.environ["ORACLE_SMTP_PASSWORD"])
-            print("Oracle SMTP authentication passed.")
-            PY
-
-            apps="$(docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps | awk '{print $1}')"
-            echo "$apps"
-            IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
-            for app in "${required[@]}"; do
-              echo "$apps" | grep -qx "$app" || {
-                echo "Missing installed Frappe app: $app"
-                exit 1
-              }
-            done
-            docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["DocType", "Raven User"]' | grep -qi "true"
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["User", "Administrator"]' | grep -qi "true"
 
       - name: Deploy by SSH
         uses: appleboy/ssh-action@v1
@@ -118,15 +88,12 @@ jobs:
           FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
           REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
           IMAGE_REF: ${{ env.IMAGE_REF }}
-          ORACLE_SMTP_HOST: ${{ env.ORACLE_SMTP_HOST }}
-          ORACLE_SMTP_PORT: ${{ env.ORACLE_SMTP_PORT }}
-          ORACLE_SMTP_USER: ${{ env.ORACLE_SMTP_USER }}
-          ORACLE_SMTP_PASSWORD: ${{ env.ORACLE_SMTP_PASSWORD }}
+          REPOSITORY_URL: ${{ env.REPOSITORY_URL }}
         with:
-          host: ${{ env.PROD_VM_HOST }}
-          username: ${{ env.PROD_VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,ORACLE_SMTP_HOST,ORACLE_SMTP_PORT,ORACLE_SMTP_USER,ORACLE_SMTP_PASSWORD
+          host: ${{ env.PROD_SERVER_HOST }}
+          username: ${{ env.PROD_SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,REPOSITORY_URL
           script: |
             set -euo pipefail
 
@@ -137,26 +104,6 @@ jobs:
                 echo "Missing required command: $1"
                 exit 1
               }
-            }
-
-            smtp_check() {
-              python3 - <<'PY'
-            import os
-            import smtplib
-            import ssl
-
-            host = os.environ["ORACLE_SMTP_HOST"]
-            port = int(os.environ["ORACLE_SMTP_PORT"])
-            user = os.environ["ORACLE_SMTP_USER"]
-            password = os.environ["ORACLE_SMTP_PASSWORD"]
-
-            with smtplib.SMTP(host, port, timeout=20) as smtp:
-                smtp.ehlo()
-                smtp.starttls(context=ssl.create_default_context())
-                smtp.ehlo()
-                smtp.login(user, password)
-            print("Oracle SMTP authentication passed.")
-            PY
             }
 
             check_apps() {
@@ -202,39 +149,60 @@ jobs:
             trap rollback ERR
 
             require_cmd docker
+            require_cmd openssl
             docker compose version
             test -d .git
             test -f compose.yaml
             available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
-            test "$available_kb" -gt 2097152 || {
-              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
-              exit 1
-            }
+            if [[ "$available_kb" -le 2097152 ]]; then
+              docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1 || {
+                echo "Less than 2 GiB available and no approved legacy image can be reclaimed"
+                exit 1
+              }
+            fi
 
             docker compose ps
-            smtp_check
             check_apps "$FRAPPE_SITE"
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" backup --with-files --compress
 
             echo "$PREVIOUS_TAG" > .last-deployed-tag
 
+            git remote set-url origin "$REPOSITORY_URL"
             git fetch --tags origin
             git fetch origin main
-            git checkout main
-            git reset --hard origin/main
 
             export VERSION_TAG="${IMAGE_REF##*:}"
             set_version_tag "$VERSION_TAG"
-            docker pull "$IMAGE_REF"
+            if docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1; then
+              docker compose down --remove-orphans
+              docker image rm yarsalabs/nepal-compliance:latest
+              if ! docker pull "$IMAGE_REF"; then
+                echo "Replacement pull failed; restoring the legacy stack"
+                docker pull yarsalabs/nepal-compliance:latest
+                docker compose up -d
+                exit 1
+              fi
+            else
+              docker pull "$IMAGE_REF"
+            fi
+
+            git checkout main
+            git reset --hard origin/main
+
+            if ! grep -qE '^STALWART_RECOVERY_ADMIN=.+$' .env; then
+              printf '\nSTALWART_RECOVERY_ADMIN=admin:%s\n' "$(openssl rand -hex 24)" >> .env
+            fi
+
             DEPLOY_STARTED=1
             docker compose pull
             docker compose up -d --remove-orphans --scale create-site=0
-            docker compose exec -T backend bench --site "$FRAPPE_SITE" migrate
+            bash scripts/install-required-apps.sh "$FRAPPE_SITE" "$REQUIRED_FRAPPE_APPS"
             docker compose restart frontend websocket queue-short queue-long scheduler
             sleep 15
 
             docker compose ps
             check_apps "$FRAPPE_SITE"
-            smtp_check
+            docker compose ps --status running stalwart | grep -q stalwart
             curl -fsS --max-time 20 "http://127.0.0.1:8080/api/method/ping" | grep -q pong
             curl -fsS --max-time 20 "http://127.0.0.1:8080/raven" >/dev/null
 

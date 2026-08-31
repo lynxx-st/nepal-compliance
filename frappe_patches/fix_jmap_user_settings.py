@@ -30,7 +30,12 @@ start_pat = re.compile(
 )
 m = start_pat.search(content)
 if not m:
-    print(f"ERROR: could not find identity validation block in {p}")
+    # Current Frappe Mail no longer validates a separate JMAP identity here.
+    # The compatibility workaround is therefore unnecessary on newer releases.
+    if "def validate_jmap_settings" in content:
+        print("SKIP: current user settings no longer contains legacy identity validation")
+        raise SystemExit(0)
+    print(f"ERROR: unsupported user_settings.py layout in {p}")
     raise SystemExit(1)
 
 indent = m.group(1)

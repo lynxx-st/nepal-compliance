@@ -17,8 +17,19 @@ REQUIRED_FILES = [
     "frappe_patches/fix_jmap_user_settings.py",
     "frappe_patches/fix_jmap_account_api.py",
     "frappe_patches/fix_pwa_setup.py",
+    "scripts/install-required-apps.sh",
+    "scripts/install-required-apps-in-container.sh",
 ]
-REQUIRED_APPS = {"erpnext", "hrms", "mail", "raven", "nepal_compliance"}
+REQUIRED_APPS = {
+    "erpnext",
+    "hrms",
+    "crm",
+    "print_designer",
+    "insights",
+    "mail",
+    "raven",
+    "nepal_compliance",
+}
 
 
 def fail(message: str) -> None:

@@ -26,7 +26,6 @@ ALLOWLIST = {
 }
 PATTERNS = {
     "private key": re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----"),
-    "oracle auth token": re.compile(r"ocid1\.user\.oc1\.\.[A-Za-z0-9_.@-]{60,}"),
     "aws access key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     "github token": re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,}\b"),
     "generic assignment secret": re.compile(

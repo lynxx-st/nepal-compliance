@@ -37,7 +37,7 @@ env:
   FRAPPE_PATH: https://github.com/frappe/frappe
   PYTHON_VERSION: "3.14.2"
   NODE_VERSION: "24.13.0"
-  REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
+  REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance' }}
   SEGMENT_DOWNLOAD_TIMEOUT_MINS: "1"
 
 permissions:
@@ -183,7 +183,7 @@ jobs:
           JSON
           jq -e . /tmp/apps.json >/dev/null
 
-      - name: Patch Containerfile for mail and Frappe patches
+      - name: Patch Containerfile for Stalwart mail and Frappe patches
         shell: bash
         run: |
           set -euo pipefail
@@ -205,7 +205,6 @@ jobs:
           RUN python3 /tmp/frappe_patches/fix_pwa_setup.py
           RUN python3 /tmp/frappe_patches/fix_boot_style_settings.py
           RUN python3 /tmp/frappe_patches/fix_apply_price_list.py
-          RUN python3 /tmp/frappe_patches/fix_email_account_login_id_length.py
           """.strip()
           marker = "\nUSER frappe"
           idx = content.rfind(marker)
