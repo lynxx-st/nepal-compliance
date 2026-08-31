@@ -37,6 +37,7 @@ jobs:
       REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
+      REPOSITORY_URL: https://github.com/${{ github.repository }}.git
     steps:
       - name: Validate deployment secrets
         shell: bash
@@ -67,10 +68,13 @@ jobs:
             test -f compose.yaml
 
             available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
-            test "$available_kb" -gt 2097152 || {
-              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
-              exit 1
-            }
+            if [[ "$available_kb" -le 2097152 ]]; then
+              docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1 || {
+                echo "Less than 2 GiB available and no approved legacy image can be reclaimed"
+                exit 1
+              }
+              echo "Low disk space accepted for one-time replacement of the approved legacy image"
+            fi
 
             docker compose ps
 
@@ -84,11 +88,12 @@ jobs:
           FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
           REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
           IMAGE_REF: ${{ env.IMAGE_REF }}
+          REPOSITORY_URL: ${{ env.REPOSITORY_URL }}
         with:
           host: ${{ env.PROD_SERVER_HOST }}
           username: ${{ env.PROD_SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
-          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,REPOSITORY_URL
           script: |
             set -euo pipefail
 
@@ -144,14 +149,17 @@ jobs:
             trap rollback ERR
 
             require_cmd docker
+            require_cmd openssl
             docker compose version
             test -d .git
             test -f compose.yaml
             available_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
-            test "$available_kb" -gt 2097152 || {
-              echo "Less than 2 GiB available in $PROD_DEPLOY_PATH"
-              exit 1
-            }
+            if [[ "$available_kb" -le 2097152 ]]; then
+              docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1 || {
+                echo "Less than 2 GiB available and no approved legacy image can be reclaimed"
+                exit 1
+              }
+            fi
 
             docker compose ps
             check_apps "$FRAPPE_SITE"
@@ -159,14 +167,32 @@ jobs:
 
             echo "$PREVIOUS_TAG" > .last-deployed-tag
 
+            git remote set-url origin "$REPOSITORY_URL"
             git fetch --tags origin
             git fetch origin main
-            git checkout main
-            git reset --hard origin/main
 
             export VERSION_TAG="${IMAGE_REF##*:}"
             set_version_tag "$VERSION_TAG"
-            docker pull "$IMAGE_REF"
+            if docker image inspect yarsalabs/nepal-compliance:latest >/dev/null 2>&1; then
+              docker compose down --remove-orphans
+              docker image rm yarsalabs/nepal-compliance:latest
+              if ! docker pull "$IMAGE_REF"; then
+                echo "Replacement pull failed; restoring the legacy stack"
+                docker pull yarsalabs/nepal-compliance:latest
+                docker compose up -d
+                exit 1
+              fi
+            else
+              docker pull "$IMAGE_REF"
+            fi
+
+            git checkout main
+            git reset --hard origin/main
+
+            if ! grep -qE '^STALWART_RECOVERY_ADMIN=.+$' .env; then
+              printf '\nSTALWART_RECOVERY_ADMIN=admin:%s\n' "$(openssl rand -hex 24)" >> .env
+            fi
+
             DEPLOY_STARTED=1
             docker compose pull
             docker compose up -d --remove-orphans --scale create-site=0
