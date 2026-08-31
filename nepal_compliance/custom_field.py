@@ -312,6 +312,8 @@ def create_custom_fields():
     created_fields = [] 
 
     for doctype_name, fields in custom_fields.items():
+        if not frappe.db.exists("DocType", doctype_name):
+            continue
         for field in fields:
             if not frappe.db.exists("Custom Field", {"dt": doctype_name, "fieldname": field["fieldname"]}):
                 custom_field = frappe.get_doc({
