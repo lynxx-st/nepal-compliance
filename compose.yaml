@@ -79,7 +79,15 @@ services:
           fi
         done;
         echo "sites/common_site_config.json found";
-        bench new-site --mariadb-user-host-login-scope='%' --admin-password=${ADMIN_PASSWORD} --db-root-username=root --db-root-password=${DB_ROOT_PASSWORD} --install-app erpnext --install-app hrms --install-app crm --install-app print_designer --install-app insights --install-app mail --install-app raven --install-app nepal_compliance --set-default frontend;
+        if [[ ! -f "sites/$${FRAPPE_SITE}/site_config.json" ]]; then
+          bench new-site --mariadb-user-host-login-scope='%' --admin-password=${ADMIN_PASSWORD} --db-root-username=root --db-root-password=${DB_ROOT_PASSWORD} --set-default "$${FRAPPE_SITE}";
+        else
+          echo "Site already exists: $${FRAPPE_SITE}";
+        fi;
+        bash apps/nepal_compliance/scripts/install-required-apps-in-container.sh "$${FRAPPE_SITE}" "$${REQUIRED_FRAPPE_APPS}";
+    environment:
+      FRAPPE_SITE: ${FRAPPE_SITE:-frontend}
+      REQUIRED_FRAPPE_APPS: ${REQUIRED_FRAPPE_APPS:-erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance}
 
   db:
     image: mariadb:10.6

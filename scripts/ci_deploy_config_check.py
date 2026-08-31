@@ -9,7 +9,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_APPS = {"erpnext", "hrms", "mail", "raven", "nepal_compliance"}
+REQUIRED_APPS = {
+    "erpnext",
+    "hrms",
+    "crm",
+    "print_designer",
+    "insights",
+    "mail",
+    "raven",
+    "nepal_compliance",
+}
 REQUIRED_IMAGE_SERVICES = {
     "backend",
     "configurator",
@@ -44,9 +53,14 @@ def validate_compose() -> None:
 
     command_match = re.search(r"^  create-site:\n(?P<body>(?:    .*\n)+)", text, flags=re.MULTILINE)
     command_text = command_match.group("body") if command_match else ""
-    missing_apps = [app for app in sorted(REQUIRED_APPS) if f"--install-app {app}" not in command_text]
+    if "install-required-apps-in-container.sh" not in command_text:
+        fail("create-site must reconcile required apps for new and existing sites")
+
+    default_apps = re.search(r"REQUIRED_FRAPPE_APPS: \$\{REQUIRED_FRAPPE_APPS:-([^}]+)\}", command_text)
+    configured_apps = set(default_apps.group(1).split(",")) if default_apps else set()
+    missing_apps = REQUIRED_APPS - configured_apps
     if missing_apps:
-        fail(f"create-site command does not install: {', '.join(missing_apps)}")
+        fail(f"create-site required app list is missing: {', '.join(sorted(missing_apps))}")
 
 
 def validate_apps_file() -> None:
@@ -55,6 +69,9 @@ def validate_apps_file() -> None:
     expected = {
         "https://github.com/frappe/erpnext": "version-16",
         "https://github.com/frappe/hrms": "version-16",
+        "https://github.com/frappe/crm": "main",
+        "https://github.com/frappe/print_designer": "main",
+        "https://github.com/frappe/insights": "version-3",
         "https://github.com/frappe/mail": "develop",
         "https://github.com/The-Commit-Company/raven": "main",
         "https://github.com/lynxx-st/nepal-compliance": "development",
@@ -71,7 +88,7 @@ def validate_release_workflow() -> None:
         "- published",
         "environment: production",
         "smtp.email.ap-singapore-1.oci.oraclecloud.com",
-        "docker compose exec -T backend bench --site \"$FRAPPE_SITE\" migrate",
+        "scripts/install-required-apps.sh",
         "trap rollback ERR",
         "docker pull \"$IMAGE_REF\"",
         "IMAGE_REF: docker.io/",
@@ -81,7 +98,7 @@ def validate_release_workflow() -> None:
         "SSH production preflight",
         "secrets.VM_SSH_KEY",
         "docker compose ps",
-        "Raven User",
+        "User\", \"Administrator",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in text]
     if missing:

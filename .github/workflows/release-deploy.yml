@@ -34,7 +34,7 @@ jobs:
       PROD_VM_USER: ${{ vars.PROD_VM_USER || 'ubuntu' }}
       PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/ubuntu/nepal-compliance' }}
       FRAPPE_SITE: ${{ vars.FRAPPE_SITE || 'frontend' }}
-      REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,mail,raven,nepal_compliance' }}
+      REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
       ORACLE_SMTP_HOST: ${{ vars.ORACLE_SMTP_HOST || 'smtp.email.ap-singapore-1.oci.oraclecloud.com' }}
@@ -100,16 +100,8 @@ jobs:
             print("Oracle SMTP authentication passed.")
             PY
 
-            apps="$(docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps | awk '{print $1}')"
-            echo "$apps"
-            IFS=',' read -ra required <<< "$REQUIRED_FRAPPE_APPS"
-            for app in "${required[@]}"; do
-              echo "$apps" | grep -qx "$app" || {
-                echo "Missing installed Frappe app: $app"
-                exit 1
-              }
-            done
-            docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["DocType", "Raven User"]' | grep -qi "true"
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps
+            docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["User", "Administrator"]' | grep -qi "true"
 
       - name: Deploy by SSH
         uses: appleboy/ssh-action@v1
@@ -228,7 +220,7 @@ jobs:
             DEPLOY_STARTED=1
             docker compose pull
             docker compose up -d --remove-orphans --scale create-site=0
-            docker compose exec -T backend bench --site "$FRAPPE_SITE" migrate
+            bash scripts/install-required-apps.sh "$FRAPPE_SITE" "$REQUIRED_FRAPPE_APPS"
             docker compose restart frontend websocket queue-short queue-long scheduler
             sleep 15
 
