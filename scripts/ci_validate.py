@@ -19,6 +19,7 @@ REQUIRED_FILES = [
     "frappe_patches/fix_pwa_setup.py",
     "frappe_patches/fix_stalwart_account_locale.py",
     "frappe_patches/fix_stalwart_existing_account.py",
+    "frappe_patches/fix_admin_stalwart_password_reset.py",
     "scripts/install-required-apps.sh",
     "scripts/install-required-apps-in-container.sh",
 ]

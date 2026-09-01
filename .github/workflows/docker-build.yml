@@ -207,6 +207,7 @@ jobs:
           RUN python3 /tmp/frappe_patches/fix_apply_price_list.py
           RUN python3 /tmp/frappe_patches/fix_stalwart_account_locale.py
           RUN python3 /tmp/frappe_patches/fix_stalwart_existing_account.py
+          RUN python3 /tmp/frappe_patches/fix_admin_stalwart_password_reset.py
           """.strip()
           marker = "\nUSER frappe"
           idx = content.rfind(marker)
