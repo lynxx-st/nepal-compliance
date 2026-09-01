@@ -222,7 +222,7 @@ services:
       - logs:/home/frappe/frappe-bench/logs
 
   stalwart:
-    image: ghcr.io/stalwartlabs/stalwart:latest
+    image: ghcr.io/stalwartlabs/stalwart:v0.16
     restart: unless-stopped
     networks:
       frappe_network:
@@ -240,7 +240,8 @@ services:
       - "8181:8080"   # Admin UI + JMAP HTTP (proxied to admin.shrijalpaudel.com.np)
       - "4443:443"    # JMAP HTTPS (after setup Stalwart moves to port 443)
     volumes:
-      - stalwart-data:/opt/stalwart-mail
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
     environment:
       TZ: Asia/Kathmandu
       STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}
@@ -252,6 +253,7 @@ volumes:
   sites:
   assets:
   logs:
+  stalwart-etc:
   stalwart-data:
 
 networks:
