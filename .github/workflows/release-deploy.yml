@@ -198,6 +198,7 @@ jobs:
             docker compose up -d --remove-orphans --scale create-site=0
             bash scripts/configure-stalwart-reverse-proxy.sh
             bash scripts/install-required-apps.sh "$FRAPPE_SITE" "$REQUIRED_FRAPPE_APPS"
+            bash scripts/configure-frappe-mail.sh
             docker compose restart frontend websocket queue-short queue-long scheduler
             sleep 15
 
