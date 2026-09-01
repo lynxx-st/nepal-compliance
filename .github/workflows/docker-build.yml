@@ -205,6 +205,8 @@ jobs:
           RUN python3 /tmp/frappe_patches/fix_pwa_setup.py
           RUN python3 /tmp/frappe_patches/fix_boot_style_settings.py
           RUN python3 /tmp/frappe_patches/fix_apply_price_list.py
+          RUN python3 /tmp/frappe_patches/fix_mail_member_domain_layout.py
+          RUN su frappe -s /bin/bash -c 'cd /home/frappe/frappe-bench && bench build --app mail'
           """.strip()
           marker = "\nUSER frappe"
           idx = content.rfind(marker)
