@@ -34,6 +34,7 @@ jobs:
       PROD_SERVER_USER: ${{ vars.PROD_SERVER_USER || 'flagforge' }}
       PROD_DEPLOY_PATH: ${{ vars.PROD_DEPLOY_PATH || '/home/flagforge/nepal-compliance' }}
       FRAPPE_SITE: ${{ vars.FRAPPE_SITE || 'frontend' }}
+      IT_MANAGEMENT_SITE: ${{ vars.IT_MANAGEMENT_SITE || 'erp.flagforgectf.com' }}
       REQUIRED_FRAPPE_APPS: ${{ vars.REQUIRED_FRAPPE_APPS || 'erpnext,hrms,crm,print_designer,insights,mail,raven,nepal_compliance' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       IMAGE_REF: docker.io/${{ vars.IMAGE_NAME || 'lynxxstein/nepal-compliance' }}:${{ github.event.release.tag_name || inputs.release_tag }}
@@ -52,12 +53,13 @@ jobs:
         env:
           PROD_DEPLOY_PATH: ${{ env.PROD_DEPLOY_PATH }}
           FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
+          IT_MANAGEMENT_SITE: ${{ env.IT_MANAGEMENT_SITE }}
           REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
         with:
           host: ${{ env.PROD_SERVER_HOST }}
           username: ${{ env.PROD_SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
-          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,IT_MANAGEMENT_SITE,REQUIRED_FRAPPE_APPS
           script: |
             set -euo pipefail
             cd "$PROD_DEPLOY_PATH"
@@ -80,12 +82,14 @@ jobs:
 
             docker compose exec -T backend bench --site "$FRAPPE_SITE" list-apps
             docker compose exec -T backend bench --site "$FRAPPE_SITE" execute frappe.db.exists --args '["User", "Administrator"]' | grep -qi "true"
+            docker compose exec -T backend bench --site "$IT_MANAGEMENT_SITE" execute frappe.db.exists --args '["User", "Administrator"]' | grep -qi "true"
 
       - name: Deploy by SSH
         uses: appleboy/ssh-action@v1
         env:
           PROD_DEPLOY_PATH: ${{ env.PROD_DEPLOY_PATH }}
           FRAPPE_SITE: ${{ env.FRAPPE_SITE }}
+          IT_MANAGEMENT_SITE: ${{ env.IT_MANAGEMENT_SITE }}
           REQUIRED_FRAPPE_APPS: ${{ env.REQUIRED_FRAPPE_APPS }}
           IMAGE_REF: ${{ env.IMAGE_REF }}
           REPOSITORY_URL: ${{ env.REPOSITORY_URL }}
@@ -93,7 +97,7 @@ jobs:
           host: ${{ env.PROD_SERVER_HOST }}
           username: ${{ env.PROD_SERVER_USER }}
           password: ${{ secrets.SERVER_SSH_PASSWORD }}
-          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,REPOSITORY_URL
+          envs: PROD_DEPLOY_PATH,FRAPPE_SITE,IT_MANAGEMENT_SITE,REQUIRED_FRAPPE_APPS,IMAGE_REF,REPOSITORY_URL
           script: |
             set -euo pipefail
 
@@ -119,6 +123,12 @@ jobs:
                 }
               done
               docker compose exec -T backend bench --site "$site" execute frappe.db.exists --args '["DocType", "Raven User"]' | grep -qi "true"
+            }
+
+            check_it_management() {
+              docker compose exec -T backend bench --site "$IT_MANAGEMENT_SITE" list-apps \
+                | awk '{print $1}' \
+                | grep -qx it_management
             }
 
             set_version_tag() {
@@ -164,6 +174,9 @@ jobs:
             docker compose ps
             check_apps "$FRAPPE_SITE"
             docker compose exec -T backend bench --site "$FRAPPE_SITE" backup --with-files --compress
+            if [[ "$IT_MANAGEMENT_SITE" != "$FRAPPE_SITE" ]]; then
+              docker compose exec -T backend bench --site "$IT_MANAGEMENT_SITE" backup --with-files --compress
+            fi
 
             echo "$PREVIOUS_TAG" > .last-deployed-tag
 
@@ -209,6 +222,8 @@ jobs:
             curl -fsS --max-time 20 "http://127.0.0.1:8080/raven" >/dev/null
 
             DEPLOY_STARTED=0
+            bash scripts/install-required-apps.sh "$IT_MANAGEMENT_SITE" "it_management"
+            check_it_management
             docker image prune -f
             echo "Deploy complete: $(date -Iseconds)"
 

@@ -82,6 +82,7 @@ def validate_apps_file() -> None:
         "https://github.com/frappe/mail": "develop",
         "https://github.com/The-Commit-Company/raven": "main",
         "https://github.com/lynxx-st/nepal-compliance": "development",
+        "https://github.com/phamos-eu/it_management": "version-16",
     }
     for url, branch in expected.items():
         if by_url.get(url) != branch:
@@ -105,6 +106,9 @@ def validate_release_workflow() -> None:
         "Deploy to self-hosted server",
         "docker compose ps",
         "User\", \"Administrator",
+        "IT_MANAGEMENT_SITE: ${{ vars.IT_MANAGEMENT_SITE || 'erp.flagforgectf.com' }}",
+        'scripts/install-required-apps.sh "$IT_MANAGEMENT_SITE" "it_management"',
+        "check_it_management",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in text]
     if missing:

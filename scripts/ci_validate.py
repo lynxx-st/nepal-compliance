@@ -17,6 +17,7 @@ REQUIRED_FILES = [
     "frappe_patches/fix_jmap_user_settings.py",
     "frappe_patches/fix_jmap_account_api.py",
     "frappe_patches/fix_pwa_setup.py",
+    "frappe_patches/fix_stalwart_account_locale.py",
     "scripts/install-required-apps.sh",
     "scripts/install-required-apps-in-container.sh",
 ]
@@ -29,6 +30,7 @@ REQUIRED_APPS = {
     "mail",
     "raven",
     "nepal_compliance",
+    "it_management",
 }
 
 
