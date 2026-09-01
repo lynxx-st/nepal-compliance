@@ -20,6 +20,7 @@ ALLOWLIST = {
     "--admin-password=${ADMIN_PASSWORD}",
     "--db-root-password=${DB_ROOT_PASSWORD}",
     "token = stalwart_token()",
+    "privateKey:",
     "your-admin-password",
     "your-db-root-password",
     "your-mysql-root-password",
